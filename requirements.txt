@@ -1,0 +1,5 @@
+pytest==8.3.5
+pytest-html==4.1.1
+requests==2.32.3
+jsonschema==4.23.0
+locust==2.32.3

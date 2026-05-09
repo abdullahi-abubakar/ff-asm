@@ -1,0 +1,69 @@
+FileTests 
+test_auth.py 11 
+test_contract.py 26 
+test_crud.py 	37 
+test_negative.py. 22 test_tenant_segregation.py 19 
+Total 115
+
+test_auth.py — 11 tests
+Checks that the API properly controls who is allowed in.
+It verifies that test1 and test2 can log in with their correct passwords, 
+and that anyone without credentials, with a wrong password, or with a made-up
+username gets rejected with a 401. It also flags two endpoints 
+(GET /integrations and POST /integrations) that appear to have no authentication protection at all
+ — which is a bug.
+
+test_contract.py — 26 tests
+Checks that what the API actually returns matches what the API documentation (Swagger) 
+says it should return. For example, if the spec says an integration response should have id,
+name, tenant_id, and type fields, this test opens a real response and confirms all four 
+fields are there with the right data types. It also flags the two places where the spec 
+documentation is itself wrong.
+
+test_crud.py — 37 tests
+Checks that the basic operations of the API work correctly end to end — creating an integration, 
+reading it back, updating it, and deleting it. Then does the same full cycle for assets.
+It also tests edge cases like deleting something twice, creating an asset under an integration
+that doesn't exist, and checking that duplicate asset names are rejected with a 409.
+
+test_negative.py — 22 tests
+Checks how the API behaves when given bad or malicious input. 
+It sends broken JSON, missing required fields, SQL injection strings, XSS code, and 
+extremely long values — and confirms the API returns a proper 4xx error every time 
+instead of crashing with a 500. A 500 on bad input means the server is not handling errors safely.
+
+
+test_tenant_segregation.py — 19 tests
+Checks that test1 and test2 are completely isolated from each other's data. 
+It creates an integration and asset as test1, then tries to read, update, and delete them 
+as test2 — every one of those attempts should be blocked with a 403 or 404. If any of them succeed,
+ that is a data breach — one tenant can see or modify another tenant's data.
+
+ Run the tests:
+ ```bash
+ pytest tests/test_auth.py -v --html=reports/auth_report.html --self-contained-html
+ pytest tests/test_contract.py -v --html=reports/contract_report.html --self-contained-html
+ pytest tests/test_crud.py -v --html=reports/crud_report.html --self-contained-html
+ pytest tests/test_tenant_segregation.py -v --html=reports/tenant_report.html --self-contained-html
+ pytest tests/test_negative.py -v --html=reports/negative_report.html --self-contained-html
+ ```
+
+ Or Using Markers:
+ ```bash
+ pytest tests/ -v -m auth --html=reports/auth_report.html --self-contained-html 
+ pytest tests/ -v -m contract --html=reports/contract_report.html --self-contained-html 
+ pytest tests/ -v -m tenant --html=reports/tenant_report.html --self-contained-html 
+ pytest tests/ -v -m crud --html=reports/crud_report.html --self-contained-html 
+ pytest tests/ -v -m negative --html=reports/negative_report.html --self-contained-html 
+ pytest tests/ -v -m tenant_segregation --html=reports/tenant_segregation_report.html --self-contained-html 
+ ```
+
+ Or Using Make:
+ ```bash
+ make test
+ ```
+
+ Or Using Docker:
+ ```bash
+ docker compose up --build --abort-on-container-exit --exit-code-from tests
+ ```

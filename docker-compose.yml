@@ -1,0 +1,45 @@
+version: "3.8"
+
+services:
+  api:
+    image: infralightio/test-integration-api
+    container_name: test-integration-api
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/swagger/doc.json"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  tests:
+    build:
+      context: .
+      dockerfile: Dockerfile.tests
+    container_name: test-runner
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      - BASE_URL=http://api:8080
+    volumes:
+      - ./reports:/app/reports
+    command: >
+      sh -c "
+        pytest tests/ -v
+          --html=reports/report.html
+          --self-contained-html
+          --tb=short
+          -p no:warnings
+        && echo ''
+        && echo '--- Running Load Test ---'
+        && locust -f load_tests/locustfile.py
+          --headless
+          --host=http://api:8080
+          --users=50
+          --spawn-rate=10
+          --run-time=60s
+          --html=reports/load_report.html
+          --only-summary
+      "
