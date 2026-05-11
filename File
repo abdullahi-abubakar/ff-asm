@@ -1,10 +1,3 @@
-FileTests 
-test_auth.py 11 
-test_contract.py 26 
-test_crud.py 	37 
-test_negative.py. 22 test_tenant_segregation.py 19 
-Total 115
-
 test_auth.py — 11 tests
 Checks that the API properly controls who is allowed in.
 It verifies that test1 and test2 can log in with their correct passwords, 

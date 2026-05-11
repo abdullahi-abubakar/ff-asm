@@ -74,3 +74,6 @@ class Settings:
 
 
 settings = Settings()
+
+# POST /integrations and POST /assets — some deployments return 200 OK, others 201 Created.
+HTTP_POST_CREATE_OK: frozenset = frozenset((200, 201))

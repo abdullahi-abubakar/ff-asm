@@ -1,4 +1,5 @@
 # QA Test Automation Suite
+
 ### `infralightio/test-integration-api`
 
 A production-grade test automation framework for the QA Test API — a multi-tenant REST service with intentional bugs, built to be found.
@@ -23,11 +24,13 @@ A production-grade test automation framework for the QA Test API — a multi-ten
 
 ## Prerequisites
 
-| Tool | Version | Required for |
-|---|---|---|
+
+| Tool                       | Version    | Required for                       |
+| -------------------------- | ---------- | ---------------------------------- |
 | Docker + Docker Compose v2 | any recent | `make run` (one-command execution) |
-| Python | 3.12+ | Local runs only |
-| pip | any | Local runs only |
+| Python                     | 3.12+      | Local runs only                    |
+| pip                        | any        | Local runs only                    |
+
 
 If you only want to use the one-command runner, **Docker is the only requirement**.
 
@@ -45,10 +48,11 @@ make run
 ```
 
 That single command:
+
 1. Pulls `infralightio/test-integration-api` from Docker Hub
 2. Starts the service container and waits for it to be healthy
-3. Runs the full functional test suite (115 tests across 5 categories)
-4. Runs the load test (50 concurrent users, 60 seconds)
+3. Runs the full functional test suite under `tests/` (pytest collection; count grows as cases are added)
+4. Runs the load test (see **Load test (Locust)** section below — **Docker** vs local **`make load`** differ)
 5. Writes two HTML reports to `./reports/`
 
 ---
@@ -81,6 +85,7 @@ test-integration/
 ├── docker-compose.yml           # Orchestrates service + test runner
 ├── Dockerfile.tests             # Test runner container image
 ├── Makefile                     # Entry points: run / test / load / clean
+├── BUG_REPORT.md               # Failure triage guide (timeouts, contract vs API, pagination, etc.)
 └── reports/                     # Generated HTML reports (created at runtime)
 ```
 
@@ -96,10 +101,12 @@ test-integration/
 
 **Pre-populated test users:**
 
-| Username | Password |
-|---|---|
-| `test1` | `test123` |
-| `test2` | `test456` |
+
+| Username | Password  |
+| -------- | --------- |
+| `test1`  | `test123` |
+| `test2`  | `test456` |
+
 
 **Resources:**
 
@@ -120,6 +127,7 @@ Assets
 ```
 
 **Structural quirks worth noting:**
+
 - `PUT /integrations` and `PATCH /assets` pass the resource `id` in the **request body**, not in the URL path — unlike typical REST conventions.
 - `GET /assets` requires `integrationId` as a **mandatory** query parameter. A bare `GET /assets` with no query string returns `400`.
 - `DELETE /integrations` returns **200**, while `DELETE /assets` returns **204** — two different success codes on the same API.
@@ -191,18 +199,26 @@ The most critical category for a multi-tenant service. A failure here represents
 
 ### `load_tests/locustfile.py` — Load test
 
-Validates the service can sustain ≥ 1000 requests per minute under realistic multi-tenant load.
+Exercises the service under **Locust** with **two tenant user classes**. Each user runs an **ordered bootstrap** first (≥10 integrations: create → list → get each → delete all but one → PUT; then ≥10 assets on the **reserved** integration: create → list → get each → delete all but one → PATCH), then **steady-state** traffic that only uses the **reserved** integration and asset (no steady-state deletes of those).
 
-**Configuration:** 50 concurrent users, 10 users/second ramp-up, 60-second run  
-**Workload mix:** 40% list integrations · 20% get integration · 15% create integration · 10% list assets · 10% create asset · 5% delete
+**How load is invoked (two different defaults):**
+
+| Command | Users | Spawn rate | Duration | Host |
+| --------|-------|------------|----------|------|
+| **`make run`** (via `docker-compose.yml`) | 50 | 10/s | 60s | `http://api:8080` in container |
+| **`make load`** (local Makefile) | **1000** | 10/s | 60s | `http://localhost:8080` |
+
+Tune `docker-compose.yml` or the `Makefile` if you need gentler or heavier load.
 
 **Pass/fail thresholds (enforced automatically):**
 
-| Metric | Threshold |
-|---|---|
-| Error rate | < 1% |
-| p95 response time | < 1000 ms |
+
+| Metric              | Threshold             |
+| ------------------- | --------------------- |
+| Error rate          | < 1%                  |
+| p95 response time   | < 1000 ms             |
 | Requests per second | ≥ 17 (= 1000 req/min) |
+
 
 The load test exits with a non-zero code if any threshold is breached, making it CI-friendly.
 
@@ -212,15 +228,17 @@ The load test exits with a non-zero code if any threshold is breached, making it
 
 The API is described as having intentional bugs. The suite is written to surface them:
 
-| # | Location | Bug | Test |
-|---|---|---|---|
-| 1 | Spec | `GET /integrations` missing `401` in declared responses | `test_spec_bug_list_integrations_missing_401` |
-| 2 | Spec | `POST /integrations` missing `401` in declared responses | `test_spec_bug_post_integrations_missing_401` |
-| 3 | Runtime | `GET /integrations` may be accessible without credentials | `test_bug_list_integrations_requires_auth` |
-| 4 | Runtime | `POST /integrations` may be accessible without credentials | `test_bug_create_integration_requires_auth` |
-| 5 | Runtime | Cross-tenant asset list via `?integrationId=<other_user's_id>` | `test_user1_cannot_list_assets_under_user2_integration` |
-| 6 | Runtime | `DELETE /integrations` cascading to orphaned assets | `test_deleting_integration_cascades_to_assets` |
-| 7 | Runtime | Duplicate asset names within same integration → `409` | `test_duplicate_asset_name_in_same_integration_returns_409` |
+
+| #   | Location | Bug                                                            | Test                                                        |
+| --- | -------- | -------------------------------------------------------------- | ----------------------------------------------------------- |
+| 1   | Spec     | `GET /integrations` missing `401` in declared responses        | `test_spec_bug_list_integrations_missing_401`               |
+| 2   | Spec     | `POST /integrations` missing `401` in declared responses       | `test_spec_bug_post_integrations_missing_401`               |
+| 3   | Runtime  | `GET /integrations` may be accessible without credentials      | `test_bug_list_integrations_requires_auth`                  |
+| 4   | Runtime  | `POST /integrations` may be accessible without credentials     | `test_bug_create_integration_requires_auth`                 |
+| 5   | Runtime  | Cross-tenant asset list via `?integrationId=<other_user's_id>` | `test_user1_cannot_list_assets_under_user2_integration`     |
+| 6   | Runtime  | `DELETE /integrations` cascading to orphaned assets            | `test_deleting_integration_cascades_to_assets`              |
+| 7   | Runtime  | Duplicate asset names within same integration → `409`          | `test_duplicate_asset_name_in_same_integration_returns_409` |
+
 
 When a test targeting a known bug fails, the assertion message explicitly labels it as a **BUG** and describes the expected vs actual behaviour.
 
@@ -260,6 +278,8 @@ pytest tests/ -m negative
 make load
 ```
 
+`make load` uses the parameters in the **Makefile** (currently **1000** users, **10**/s spawn rate — adjust there if your machine or API cannot sustain it). For the lighter profile used inside **`make run`**, see `docker-compose.yml` (**50** users).
+
 Or with the Locust web UI for live monitoring:
 
 ```bash
@@ -277,11 +297,18 @@ make clean   # stops containers, removes reports
 
 ## Configuration
 
-All settings live in `config/settings.py` and are driven by environment variables. Nothing is hardcoded.
+Settings are centralised in `config/settings.py`. **`BASE_URL`** is the main environment override; other values below use **defaults in code** unless you edit the file.
 
-| Variable | Default | Description |
-|---|---|---|
-| `BASE_URL` | `http://localhost:8080` | API base URL |
+
+| Variable   | Default                 | Description  |
+| ---------- | ----------------------- | ------------ |
+| `BASE_URL` | `http://localhost:8080` | API origin (scheme + host + port); API paths still use `api_base` below |
+
+**Code-only defaults** (edit `config/settings.py` if needed):
+
+- `api_base` — `"/api/v1"` (prefix for all REST calls).
+- `request_timeout` — seconds for each `requests` call (default **10**).
+- `HTTP_POST_CREATE_OK` — `frozenset((200, 201))` so successful **POST creates** pass whether the service returns **200 OK** or **201 Created** (test-harness tolerance, not an API change).
 
 To run against a different host or port:
 
@@ -297,10 +324,12 @@ The docker-compose setup automatically sets `BASE_URL=http://api:8080` for the t
 
 After a run, two self-contained HTML files are written to `./reports/`:
 
-| File | Contents |
-|---|---|
-| `reports/report.html` | Pytest HTML report — all 115 functional tests with pass/fail/skip status, durations, and full assertion messages for failures |
-| `reports/load_report.html` | Locust HTML report — RPS chart, response time percentiles, per-endpoint breakdown, error summary |
+
+| File                       | Contents                                                                                                                      |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `reports/report.html`      | Pytest HTML report — full `tests/` run: pass/fail/skip, durations, assertion detail on failures |
+| `reports/load_report.html` | Locust HTML report — RPS chart, response time percentiles, per-endpoint breakdown, error summary                              |
+
 
 Open either file directly in any browser — no server needed.
 
@@ -308,7 +337,9 @@ Open either file directly in any browser — no server needed.
 
 ## Design Decisions
 
-**No hardcoded values.** All URLs, credentials, timeouts, and thresholds live in `config/settings.py` and are overridable via environment variables.
+**POST create status codes.** Some stacks return **201 Created** for `POST /integrations` and `POST /assets`; others return **200**. The suite accepts either via `HTTP_POST_CREATE_OK` in `config/settings.py`.
+
+**No hardcoded URLs in tests.** URLs are built from `BASE_URL` + `api_base` via `APIClient` / `settings.url()`.
 
 **Domain-specific clients.** `IntegrationClient` and `AssetClient` in `api/helpers.py` mirror the actual API surface exactly, including the non-standard id-in-body pattern for `PUT /integrations` and `PATCH /assets`. Tests call these helpers, not raw HTTP verbs, so an endpoint change requires one fix in one place.
 

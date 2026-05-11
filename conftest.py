@@ -16,7 +16,7 @@ import requests
 
 from api.client import APIClient, as_anon, as_user
 from api.helpers import AssetClient, IntegrationClient
-from config.settings import settings
+from config.settings import HTTP_POST_CREATE_OK, settings
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +98,9 @@ def assets2(client2: APIClient) -> AssetClient:
 def integration_u1(integrations1: IntegrationClient) -> Generator[Dict, None, None]:
     """A live integration owned by user1. Deleted after the test."""
     resp = integrations1.create()
-    assert resp.status_code == 200, f"Setup: could not create integration ({resp.status_code}): {resp.text}"
+    assert resp.status_code in HTTP_POST_CREATE_OK, (
+        f"Setup: could not create integration ({resp.status_code}): {resp.text}"
+    )
     resource = resp.json()
     yield resource
     integrations1.delete(resource["id"])
@@ -108,7 +110,9 @@ def integration_u1(integrations1: IntegrationClient) -> Generator[Dict, None, No
 def integration_u2(integrations2: IntegrationClient) -> Generator[Dict, None, None]:
     """A live integration owned by user2. Deleted after the test."""
     resp = integrations2.create()
-    assert resp.status_code == 200, f"Setup: could not create integration ({resp.status_code}): {resp.text}"
+    assert resp.status_code in HTTP_POST_CREATE_OK, (
+        f"Setup: could not create integration ({resp.status_code}): {resp.text}"
+    )
     resource = resp.json()
     yield resource
     integrations2.delete(resource["id"])
@@ -120,7 +124,9 @@ def asset_u1(
 ) -> Generator[Dict, None, None]:
     """A live asset owned by user1 (under user1's integration). Deleted after the test."""
     resp = assets1.create(integration_id=integration_u1["id"])
-    assert resp.status_code == 200, f"Setup: could not create asset ({resp.status_code}): {resp.text}"
+    assert resp.status_code in HTTP_POST_CREATE_OK, (
+        f"Setup: could not create asset ({resp.status_code}): {resp.text}"
+    )
     resource = resp.json()
     yield resource
     assets1.delete(resource["id"])
@@ -132,7 +138,9 @@ def asset_u2(
 ) -> Generator[Dict, None, None]:
     """A live asset owned by user2 (under user2's integration). Deleted after the test."""
     resp = assets2.create(integration_id=integration_u2["id"])
-    assert resp.status_code == 200, f"Setup: could not create asset ({resp.status_code}): {resp.text}"
+    assert resp.status_code in HTTP_POST_CREATE_OK, (
+        f"Setup: could not create asset ({resp.status_code}): {resp.text}"
+    )
     resource = resp.json()
     yield resource
     assets2.delete(resource["id"])

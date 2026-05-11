@@ -14,7 +14,7 @@ load: ## Run load test only (service must be running on localhost:8080)
 	locust -f load_tests/locustfile.py \
 		--headless \
 		--host=http://localhost:8080 \
-		--users=100 \
+		--users=1000 \
 		--spawn-rate=10 \
 		--run-time=60s \
 		--html=reports/load_report.html \

@@ -44,15 +44,21 @@ class TestMalformedRequests:
             headers={"Content-Type": "application/json"},
             timeout=settings.request_timeout,
         )
-        assert 400 <= resp.status_code < 500
+        assert 400 <= resp.status_code < 500, (
+            f"Invalid JSON body to POST /assets should return 4xx, got {resp.status_code}"
+        )
 
     def test_null_body_to_post_integrations_returns_4xx(self, client1):
         resp = client1.post("/integrations", json=None)
-        assert 400 <= resp.status_code < 500
+        assert 400 <= resp.status_code < 500, (
+            f"Null body to POST /integrations should return 4xx, got {resp.status_code}"
+        )
 
     def test_array_body_to_post_integrations_returns_4xx(self, client1):
         resp = client1.post("/integrations", json=["name", "type"])
-        assert 400 <= resp.status_code < 500
+        assert 400 <= resp.status_code < 500, (
+            f"Non-object JSON body to POST /integrations should return 4xx, got {resp.status_code}"
+        )
 
 
 class TestInvalidIds:
@@ -104,19 +110,37 @@ class TestMissingRequiredFields:
 
     def test_create_integration_missing_name(self, client1):
         resp = client1.post("/integrations", json={"type": "aws"})
-        assert 400 <= resp.status_code < 500
+        assert 400 <= resp.status_code < 500, (
+            f"POST /integrations without name should return 4xx, got {resp.status_code}"
+        )
 
     def test_create_integration_missing_type(self, client1):
         resp = client1.post("/integrations", json={"name": "no-type"})
-        assert 400 <= resp.status_code < 500
+        assert 400 <= resp.status_code < 500, (
+            f"POST /integrations without type should return 4xx, got {resp.status_code}"
+        )
 
     def test_create_asset_missing_name(self, integration_u1, client1):
         resp = client1.post("/assets", json={"integration_id": integration_u1["id"]})
-        assert 400 <= resp.status_code < 500
+        assert 400 <= resp.status_code < 500, (
+            f"POST /assets without name should return 4xx, got {resp.status_code}"
+        )
 
     def test_create_asset_missing_integration_id(self, client1):
         resp = client1.post("/assets", json={"name": "no-integration-id"})
-        assert 400 <= resp.status_code < 500
+        assert 400 <= resp.status_code < 500, (
+            f"POST /assets without integration_id should return 4xx, got {resp.status_code}"
+        )
+
+    def test_create_asset_description_only_missing_required_fields(self, client1):
+        """Body has only description — integration_id and name are required."""
+        resp = client1.post(
+            "/assets",
+            json={"description": "missing integration_id and name"},
+        )
+        assert 400 <= resp.status_code < 500, (
+            f"POST /assets with only description should return 4xx, got {resp.status_code}"
+        )
 
     def test_update_integration_missing_id_in_body(self, client1):
         """PUT /integrations: id MUST be in the body — omitting it should fail."""
@@ -145,7 +169,17 @@ class TestInvalidPagination:
 
     def test_zero_limit_returns_4xx_or_ignores(self, client1):
         resp = client1.get("/integrations", params={"limit": 0})
-        assert resp.status_code != 500, "limit=0 caused a 500 server error"
+        assert resp.status_code != 500, (
+            f"limit=0 caused a 500 server error (got {resp.status_code})"
+        )
+
+    def test_negative_page_and_zero_limit_returns_400_or_422(self, client1):
+        """Invalid page/limit together should be rejected as bad request (strict validation)."""
+        resp = client1.get("/integrations", params={"page": -1, "limit": 0})
+        assert resp.status_code in (400, 422), (
+            f"GET /integrations with page=-1 and limit=0 should return 400 or 422, "
+            f"got {resp.status_code}"
+        )
 
     def test_non_integer_page_returns_4xx(self, client1):
         resp = client1.get("/integrations", params={"page": "abc"})
@@ -155,7 +189,9 @@ class TestInvalidPagination:
 
     def test_non_integer_limit_returns_4xx(self, client1):
         resp = client1.get("/integrations", params={"limit": "abc"})
-        assert 400 <= resp.status_code < 500
+        assert 400 <= resp.status_code < 500, (
+            f"Non-integer limit should return 4xx, got {resp.status_code}"
+        )
 
 
 class TestWrongHttpMethods:
@@ -179,14 +215,18 @@ class TestErrorResponseFormat:
 
     def test_404_body_contains_code_and_message(self, client1):
         resp = client1.get("/integrations/00000000-0000-0000-0000-000000000000")
-        assert resp.status_code == 404
+        assert resp.status_code == 404, (
+            f"GET nonexistent integration should return 404, got {resp.status_code}"
+        )
         body = resp.json()
         assert "code" in body, f"404 body missing 'code' field: {body}"
         assert "message" in body, f"404 body missing 'message' field: {body}"
 
     def test_error_code_field_matches_http_status(self, client1):
         resp = client1.get("/integrations/00000000-0000-0000-0000-000000000000")
-        assert resp.status_code == 404
+        assert resp.status_code == 404, (
+            f"GET nonexistent integration should return 404, got {resp.status_code}"
+        )
         body = resp.json()
         assert body["code"] == 404, (
             f"error body 'code' field should be 404, got {body['code']}"
@@ -194,7 +234,9 @@ class TestErrorResponseFormat:
 
     def test_400_body_is_valid_json(self, client1):
         resp = client1.get("/assets")  # missing integrationId → 400
-        assert resp.status_code == 400
+        assert resp.status_code == 400, (
+            f"GET /assets without integrationId should return 400, got {resp.status_code}"
+        )
         try:
             resp.json()
         except Exception:

@@ -17,7 +17,7 @@ A failure in any of these tests represents a DATA BREACH, not just a bug.
 import pytest
 
 from api.helpers import IntegrationClient, AssetClient
-from config.settings import settings
+from config.settings import HTTP_POST_CREATE_OK
 
 pytestmark = pytest.mark.tenant
 
@@ -34,7 +34,9 @@ class TestTenantIdConsistency:
         tenant_ids = set()
         for i in range(3):
             resp = integrations1.create(name=f"consistency-{i}")
-            assert resp.status_code == 200
+            assert resp.status_code in HTTP_POST_CREATE_OK, (
+                f"POST /integrations (consistency-{i}) should return 200 or 201, got {resp.status_code}: {resp.text[:500]!r}"
+            )
             body = resp.json()
             ids.append(body["id"])
             tenant_ids.add(body["tenant_id"])
@@ -79,7 +81,9 @@ class TestIntegrationListIsolation:
         integrations1: IntegrationClient,
     ):
         resp = integrations1.list()
-        assert resp.status_code == 200
+        assert resp.status_code == 200, (
+            f"GET /integrations should return 200, got {resp.status_code}: {resp.text[:500]!r}"
+        )
         ids = [item["id"] for item in resp.json()]
         assert integration_u2["id"] not in ids, (
             f"DATA BREACH: user1's integration list contains {integration_u2['id']!r} "
@@ -92,7 +96,9 @@ class TestIntegrationListIsolation:
         integrations2: IntegrationClient,
     ):
         resp = integrations2.list()
-        assert resp.status_code == 200
+        assert resp.status_code == 200, (
+            f"GET /integrations should return 200, got {resp.status_code}: {resp.text[:500]!r}"
+        )
         ids = [item["id"] for item in resp.json()]
         assert integration_u1["id"] not in ids, (
             f"DATA BREACH: user2's integration list contains {integration_u1['id']!r} "

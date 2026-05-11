@@ -16,7 +16,7 @@ import pytest
 import requests
 from requests.auth import HTTPBasicAuth
 
-from config.settings import settings
+from config.settings import HTTP_POST_CREATE_OK, settings
 
 pytestmark = pytest.mark.auth
 
@@ -61,11 +61,11 @@ class TestValidCredentials:
     )
     def test_authenticated_user_can_create_integration(self, user, password):
         resp = raw_post("/integrations", {"name": "auth-test", "type": "aws"}, user, password)
-        assert resp.status_code == 200, (
-            f"User '{user}' should create integration, got {resp.status_code}"
+        assert resp.status_code in HTTP_POST_CREATE_OK, (
+            f"User '{user}' should create integration (200 or 201), got {resp.status_code}"
         )
         # Teardown: delete the created integration to keep state clean
-        if resp.status_code == 200:
+        if resp.status_code in HTTP_POST_CREATE_OK:
             integration_id = resp.json().get("id")
             if integration_id:
                 requests.delete(
