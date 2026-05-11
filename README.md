@@ -27,33 +27,60 @@ A production-grade test automation framework for the QA Test API — a multi-ten
 
 | Tool                       | Version    | Required for                       |
 | -------------------------- | ---------- | ---------------------------------- |
-| Docker + Docker Compose v2 | any recent | `make run` (one-command execution) |
-| Python                     | 3.12+      | Local runs only                    |
-| pip                        | any        | Local runs only                    |
+| Docker                     | any recent | Run the **API** container (`make test` / `make load` expect the service reachable) |
+| Docker Compose v2          | any recent | **`make run`** only (orchestrates API + test runner) |
+| Python                     | 3.12+      | Functional + load tests (`make test`, Locust in `make load`) |
+| pip                        | any        | Install `requirements.txt` |
 
-
-If you only want to use the one-command runner, **Docker is the only requirement**.
+You need **Docker** to run the published API image, and **Python** to run this suite against it (unless you only use the all-in-one `make run` path).
 
 ---
 
 ## Quick Start
 
-```bash
-# 1. Unzip the project
-unzip test-integration-suite-v2.zip
-cd test-integration
+### 1. Clone the test suite
 
-# 2. Run everything — pulls image, starts service, runs all tests, generates reports
-make run
+```bash
+git clone https://github.com/abdullahi-abubakar/ff-asm
+cd test-integration
 ```
 
-That single command:
+Use your real Git remote URL and directory name if they differ.
 
-1. Pulls `infralightio/test-integration-api` from Docker Hub
-2. Starts the service container and waits for it to be healthy
-3. Runs the full functional test suite under `tests/` (pytest collection; count grows as cases are added)
-4. Runs the load test (see **Load test (Locust)** section below — **Docker** vs local **`make load`** differ)
-5. Writes two HTML reports to `./reports/`
+### 2. Run the API locally (Docker Hub)
+
+The service image is published on Docker Hub:
+
+**[https://hub.docker.com/r/infralightio/test-integration-api](https://hub.docker.com/r/infralightio/test-integration-api)**
+
+Pull and start the container so the API listens on **port 8080** (same as tests and examples):
+
+```bash
+docker pull infralightio/test-integration-api
+docker run -d --name test-integration-api -p 8080:8080 infralightio/test-integration-api
+```
+
+Wait until the API is healthy (Swagger loads). The **OpenAPI / Swagger UI** is at:
+
+**[http://localhost:8080/swagger/index.html#/](http://localhost:8080/swagger/index.html#/)**
+
+Raw JSON: `http://localhost:8080/swagger/doc.json`
+
+### 3. Install Python dependencies
+
+```bash
+python3 -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+### 4. Run functional tests, then load tests
+
+```bash
+make test    # pytest → reports/report.html
+make load    # Locust → reports/load_report.html
+```
+
+`make test` and `make load` assume **`BASE_URL=http://localhost:8080`** (the default in `config/settings.py`). Stop the API container when finished: `docker stop test-integration-api`.
 
 ---
 
@@ -93,10 +120,12 @@ test-integration/
 
 ## API Under Test
 
+**Docker Hub (API image):** [https://hub.docker.com/r/infralightio/test-integration-api](https://hub.docker.com/r/infralightio/test-integration-api)
+
 **Base URL:** `http://localhost:8080`  
 **Base path:** `/api/v1`  
 **Auth:** HTTP Basic Authentication  
-**Swagger UI:** `http://localhost:8080/swagger/index.html`  
+**Swagger UI (OpenAPI):** [http://localhost:8080/swagger/index.html#/](http://localhost:8080/swagger/index.html#/)  
 **OpenAPI JSON:** `http://localhost:8080/swagger/doc.json`
 
 **Pre-populated test users:**
@@ -246,25 +275,26 @@ When a test targeting a known bug fails, the assertion message explicitly labels
 
 ## Running the Tests
 
-### Option A — Full run via Docker (recommended)
+### Recommended — Local suite against the Docker Hub API
+
+1. Start the API (see [Quick Start](#quick-start)).
+2. Activate your venv and install deps (`pip install -r requirements.txt`).
+3. Run **`make test`**, then **`make load`** (or either on its own).
+
+### Option A — One-command Docker Compose (API + tests + load in container)
 
 ```bash
 make run
 ```
 
-No Python installation needed. Handles everything end to end.
+Uses `docker-compose.yml`: builds the test-runner image, runs pytest and Locust against `http://api:8080`, writes reports into `./reports/`. No local Python required.
 
-### Option B — Functional tests only (service already running)
+### Option B — Functional tests only (API already on localhost:8080)
 
 ```bash
-# Install dependencies
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-
-# Run all functional tests
 make test
 
-# Or run a specific category
+# Or run by marker
 pytest tests/ -m auth
 pytest tests/ -m contract
 pytest tests/ -m tenant
@@ -272,7 +302,7 @@ pytest tests/ -m crud
 pytest tests/ -m negative
 ```
 
-### Option C — Load test only (service already running)
+### Option C — Load test only (API already on localhost:8080)
 
 ```bash
 make load
@@ -349,7 +379,7 @@ Open either file directly in any browser — no server needed.
 
 **Bug tests are first-class.** Tests targeting known spec bugs are not skipped or marked xfail — they run and fail loudly, with assertion messages that explicitly label the finding as a bug and explain the expected behaviour. This is intentional: a failing test is a bug report.
 
-**Self-contained execution.** `make run` is the only command a reviewer needs. It requires no prior setup beyond having Docker installed.
+**Execution paths.** The **[Quick Start](#quick-start)** path is **git clone** → **Docker Hub API** on `localhost:8080` → **`make test`** / **`make load`**. Reviewers who prefer one command and no local Python can use **`make run`** (Docker Compose runs pytest and Locust inside the test-runner container).
 
 ---
 
